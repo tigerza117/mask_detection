@@ -1,4 +1,9 @@
-from flask import Flask, render_template, request, send_file, session, copy_current_request_context
+import signal
+import sys
+import threading
+import time
+
+from flask import Flask, render_template, request, copy_current_request_context, Response
 import torch
 import io
 import base64
@@ -6,6 +11,7 @@ from PIL import Image
 from flask_socketio import SocketIO, emit, disconnect
 from threading import Lock
 from flask_cors import CORS
+import cv2
 
 async_mode = None
 model = torch.hub.load('ultralytics/yolov5', 'custom', path="best.pt", force_reload=True)
@@ -15,6 +21,10 @@ app.config['SECRET_KEY'] = 'secret!'
 socket_ = SocketIO(app, async_mode=async_mode)
 thread = None
 thread_lock = Lock()
+buffered = io.BytesIO()
+viewer = 0
+camera = cv2.VideoCapture('intro.mp4')
+running = True
 
 
 @app.route('/')
@@ -64,12 +74,88 @@ def disconnect_request():
 
 
 def base64_encode_img(img):
-    buffered = io.BytesIO()
-    img.save(buffered, format="PNG")
-    buffered.seek(0)
-    img_byte = buffered.getvalue()
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)
+    img_byte = buffer.getvalue()
     encoded_img = "data:image/png;base64," + base64.b64encode(img_byte).decode()
     return encoded_img
+
+
+def gen_frames():
+    while True:
+        time.sleep(100 / 1000)
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + buffered.getvalue() + b'\r\n')
+
+
+@app.route('/video_feed')
+def video_feed():
+    newViewer()
+    time.sleep(1)
+    return Response(gen_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+def signal_handler(sig, frame):
+    global running
+    running = False
+    sys.exit(0)
+
+
+signal.signal(signal.SIGINT, signal_handler)
+
+
+def thread_callback():
+    while running:
+        if viewer < 1:
+            time.sleep(0.5)
+            continue
+        success, frame = camera.read()  # read the camera frame
+        if not success:
+            camera.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            continue
+        else:
+            ret, buffer = cv2.imencode('.jpg', frame)
+            frame = buffer.tobytes()
+            img = Image.open(io.BytesIO(frame))
+            results = model(img, size=640)  # reduce size=320 for faster inference
+            rendered_imgs = results.render()
+            img_base64 = Image.fromarray(rendered_imgs[0])
+            buffered.seek(0)
+            buffered.truncate(0)
+            img_base64.save(buffered, format="JPEG")
+    sys.exit()
+
+
+thr = threading.Thread(target=thread_callback)
+thr.start()
+
+
+@app.after_request
+def response_processor(response):
+    # Prepare all the local variables you need since the request context
+    # will be gone in the callback function
+
+    path = request.path
+
+    @response.call_on_close
+    def process_after_request():
+        # Do whatever is necessary here
+        if path == "/video_feed":
+            closeViewer()
+        pass
+
+    return response
+
+
+def newViewer():
+    global viewer
+    viewer += 1
+
+
+def closeViewer():
+    global viewer
+    viewer -= 1
 
 
 if __name__ == '__main__':
