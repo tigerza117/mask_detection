@@ -1,10 +1,141 @@
-<body>
-    <div class="container">
-        <div class="row">
-            <div class="col-lg-8  offset-lg-2">
-                <h3 class="mt-5">Live Streaming</h3>
-                <img src="{{ url_for('video_feed') }}" width="100%">
-            </div>
-        </div>
-    </div>
+<!DOCTYPE HTML>
+<html>
+<head>
+    <title>Socket-Test</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"
+            integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+    <script src="https://cdn.socket.io/4.4.0/socket.io.min.js"
+            integrity="sha384-1fOn6VtTq3PWwfsOrk45LnYcGosJwzMHv+Xh/Jx5303FVOXzEnw0EpLv30mtjmlj"
+            crossorigin="anonymous"></script>
+    <script type="text/javascript" charset="utf-8">
+        $(document).ready(function () {
+            const namespace = '/predict';
+            const socket = io(namespace);
+            let currentStream = undefined;
+            navigator.mediaDevices.enumerateDevices().then(gotDevices);
+
+            socket.on('connect', function () {
+            });
+
+            socket.on('process_response', function (msg, cb) {
+
+            });
+
+            $('form#emit').submit(function (event) {
+                if (typeof currentStream !== 'undefined') {
+                    stopMediaTracks(currentStream);
+                }
+                console.log("Click!")
+                const videoConstraints = {};
+                const select = $("#select")
+                if (select.val() === '') {
+                    videoConstraints.facingMode = 'environment';
+                } else {
+                    videoConstraints.deviceId = {exact: select.val()};
+                }
+                navigator.mediaDevices.getUserMedia({
+                    video: videoConstraints,
+                    audio: false
+                }).then((stream) => {
+                    console.log("Got stream success")
+                    //socket.emit('process', {data: $('#emit_data').val()});
+                    const video = document.getElementById("video")
+                    currentStream = stream;
+                    video.srcObject = stream;
+                    console.log(stream.getVideoTracks()[0].readyState)
+                    return navigator.mediaDevices.enumerateDevices();
+                }).catch(() => {
+                    console.log("Got stream fail")
+                });
+
+                return false;
+            });
+            $('form#disconnect').submit(function (event) {
+                socket.emit('disconnect_request');
+                return false;
+            });
+
+            $('#stop').submit(function (event) {
+                event.preventDefault()
+                $("#video-feed").attr('src','https://thumbs.dreamstime.com/b/tv-no-signal-background-illustration-no-signal-television-screen-graphic-broadcast-design-tv-no-signal-background-illustration-no-138274169.jpg');
+            })
+
+            $('#play').submit(function (event) {
+                event.preventDefault()
+                $("#video-feed").attr('src','http://127.0.0.1:5000/video_feed');
+            })
+
+            $("#predict").submit(function (event) {
+                event.preventDefault();
+                $.ajax({
+                    url: 'http://127.0.0.1:5000/predict',
+                    type: 'POST',
+                    data: new FormData($("#predict")[0]),
+                    async: false,
+                    cache: false,
+                    contentType: false,
+                    processData: false,
+                    success: function (resp) {
+                        //const base64 = window.btoa(resp);
+                        $("#show").html(`<img src="${resp}" />`);
+                    },
+                });
+                return false;
+            });
+
+            function gotDevices(mediaDevices) {
+                const select = $("#select")
+                select.html("");
+                mediaDevices.forEach(mediaDevice => {
+                    if (mediaDevice.kind === 'videoinput') {
+                        select.append(`<option value="${mediaDevice.deviceId}">${mediaDevice.label}</option>`)
+                    }
+                });
+            }
+
+            function stopMediaTracks(stream) {
+                stream.getTracks().forEach(track => {
+                    track.stop();
+                });
+            }
+        });
+    </script>
+</head>
+<body style="background-color:white;">
+
+
+<div>
+    <h1>Upload Your Images</h1>
+    <form id="predict" enctype="multipart/form-data">
+        <input type="file" name="image"/>
+        <button type="submit" id="btn">Upload Files!</button>
+    </form>
+    <div id="show"></div>
+</div>
+
+<h1 style="background-color:white;">Socket</h1>
+<form id="emit" method="POST" action='#'>
+    <input type="submit" value="Realtime detection">
+    <label for="select">Select camera</label><select id="select" name="select">
+    <option></option>
+</select>
+</form>
+
+<form id="disconnect" method="POST" action="#">
+    <input type="submit" value="Disconnect Server">
+</form>
+
+<video id="video" autoplay playsinline></video>
+<img id="video-feed" src="http://127.0.0.1:5000/video_feed" alt="a"/>
+<form id="stop" method="POST" action="#">
+    <input type="submit" value="Stop video feed">
+</form>
+<form id="play" method="POST" action="#">
+    <input type="submit" value="Play video feed">
+</form>
+<h2 style="background-color:white;">Logs</h2>
+<div id="log"></div>
+
+
 </body>
+</html>
