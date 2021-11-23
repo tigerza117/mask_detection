@@ -30,6 +30,7 @@ def predict():
         buffered = io.BytesIO()
         img_base64 = Image.fromarray(results.render()[0])
         img_base64.save(buffered, format="JPEG")
+        buffered.seek(0)
         return send_file(buffered, mimetype='image/jpeg')
 
 
