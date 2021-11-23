@@ -41,7 +41,7 @@ def predict():
         image_file = request.files["image"]
         image_bytes = image_file.read()
         img = Image.open(io.BytesIO(image_bytes))
-        results = model(img, size=320)  # reduce size=320 for faster inference
+        results = model(img, size=640)  # reduce size=320 for faster inference
         # buffered = io.BytesIO()
         img_base64 = Image.fromarray(results.render()[0])
         # img_base64.save(buffered, format="JPEG")
