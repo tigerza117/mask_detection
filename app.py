@@ -6,6 +6,7 @@ import base64
 from PIL import Image
 
 
+model = torch.hub.load('ultralytics/yolov5', 'custom', path="best.pt", force_reload=True)
 app = Flask(__name__)
 
 
@@ -33,5 +34,4 @@ def predict():
 
 
 if __name__ == '__main__':
-    model = torch.hub.load('ultralytics/yolov5', 'custom', path="best.pt", force_reload=True)
     app.run(host="0.0.0.0", debug=False)
